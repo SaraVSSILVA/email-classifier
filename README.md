@@ -1,154 +1,106 @@
 # 📧 AutoMail AI - Classificador Inteligente de Emails
 
+**Deploy:** [Acesse a Aplicação Online](https://email-classifier-je4s.onrender.com/)
+
 Solução de IA para classificação automática de emails e geração de sugestões de resposta para empresas do setor financeiro.
+
+## 📺 Demo
+
+[Link para o Vídeo de Apresentação no YouTube](SEU_LINK_DO_VIDEO_AQUI)
+
+---
 
 ## 🎯 Sobre o Projeto
 
-O **AutoMail AI** é uma aplicação web que utiliza Inteligência Artificial para automatizar a triagem de emails corporativos, classificando-os como **Produtivos** ou **Improdutivos** e gerando sugestões de resposta profissionais quando necessário.
+O **AutoMail AI** é uma aplicação web fullstack que utiliza Inteligência Artificial para automatizar a triagem de emails corporativos. O sistema classifica mensagens recebidas como **Produtivas** ou **Improdutivas** e gera, automaticamente, minutas de respostas profissionais, reduzindo drasticamente o tempo de processamento da equipe financeira.
 
 ### Problema Resolvido
+Empresas do setor financeiro lidam com alto volume de comunicação. Esta solução resolve:
+* **Gargalo Operacional:** Elimina a leitura manual de emails irrelevantes (spam, felicitações).
+* **Padronização:** Garante que todas as respostas sigam um tom profissional e consistente.
+* **Agilidade:** Processamento em tempo real de requisições e dúvidas.
 
-Empresas do setor financeiro recebem centenas de emails diariamente, incluindo:
-- Solicitações de suporte e status de requisições
-- Compartilhamento de documentos
-- Mensagens improdutivas (felicitações, spam, etc.)
-
-Esta solução **libera tempo da equipe** ao automatizar a classificação e sugerir respostas, eliminando trabalho manual repetitivo.
+---
 
 ## ✨ Funcionalidades
 
-- ✅ **Classificação Inteligente**: Categoriza emails em Produtivo ou Improdutivo
-- ✅ **Sugestões de Resposta**: Gera respostas profissionais contextualizadas para emails produtivos
-- ✅ **Múltiplos Formatos**: Aceita texto direto, arquivos .txt e .pdf
-- ✅ **Interface Intuitiva**: Design moderno e responsivo com Tailwind CSS
-- ✅ **API Rápida**: Integração com Groq (Llama 3.3 70B) para respostas em segundos
+* ✅ **Classificação Inteligente:** Categoriza emails usando LLMs de última geração.
+* ✅ **Sugestões de Resposta:** Gera respostas empáticas e contextuais apenas para demandas reais.
+* ✅ **Suporte a Arquivos:** Leitura e extração de texto de arquivos `.txt` e `.pdf`.
+* ✅ **Interface Responsiva:** UX amigável construída com Tailwind CSS.
+* ✅ **Alta Performance:** Integração com Groq para inferência em milissegundos.
+
+---
+
+## 💡 Decisões Técnicas
+
+A escolha da stack foi focada em **performance, custo-benefício e simplicidade**:
+
+* **Groq + Llama 3:** Optei pela API da Groq em vez da OpenAI devido à **latência extremamente baixa** (essencial para UX em tempo real) e ao uso do modelo Llama 3.3 70B, que oferece excelente compreensão de contexto em português com custo reduzido.
+* **JSON Mode:** A IA foi configurada para retornar estritamente JSON. Isso evita erros de *parsing* no frontend e garante que a aplicação nunca quebre por formatação inesperada do texto gerado.
+* **Tailwind CSS:** Utilizado via CDN para prototipagem rápida de uma interface limpa, moderna e responsiva sem a complexidade de *build steps* do Node.js.
+
+---
 
 ## 🛠️ Tecnologias Utilizadas
 
-### Backend
-- **Python 3.x**
-- **Flask** - Framework web
-- **Groq API** - IA generativa (Llama 3.3 70B Versatile)
-- **pypdf** - Extração de texto de PDFs
-- **python-dotenv** - Gerenciamento de variáveis de ambiente
+**Backend**
+* Python 3.10+
+* Flask (Web Framework)
+* Groq API (Inference Engine)
+* PyPDF (Processamento de Arquivos)
 
-### Frontend
-- **HTML5 + JavaScript**
-- **Tailwind CSS** - Estilização
-- **Font Awesome** - Ícones
+**Frontend**
+* HTML5 / JavaScript (Vanilla)
+* Tailwind CSS (Estilização)
 
-### Deploy
-- **Render** - Hospedagem em nuvem
-- **Gunicorn** - Servidor WSGI para produção
+**Infraestrutura**
+* Render (Cloud Hosting)
+* Gunicorn (WSGI Server)
+
+---
 
 ## 🚀 Como Executar Localmente
 
-### Pré-requisitos
-
-- Python 3.8+
-- Chave de API do Groq (gratuita em https://console.groq.com/keys)
-
-### Instalação
+**Pré-requisitos:** Python 3.8+ e uma chave de API da [Groq Cloud](https://console.groq.com/).
 
 1. **Clone o repositório**
-```bash
-git clone https://github.com/seu-usuario/email-classifier.git
-cd email-classifier
-```
+   ```bash
+   git clone [https://github.com/SEU_USUARIO/email-classifier.git](https://github.com/SEU_USUARIO/email-classifier.git)
+   cd email-classifier
+   ````
+2. **Configure o Ambiente**
 
-2. **Crie um ambiente virtual**
-```bash
+```Bash
 python -m venv venv
-```
-
-3. **Ative o ambiente virtual**
-
-Windows:
-```bash
+# Windows
 venv\Scripts\activate
-```
-
-Linux/Mac:
-```bash
+# Linux/Mac
 source venv/bin/activate
 ```
+3. **Instale as dependências**
 
-4. **Instale as dependências**
-```bash
+```
 pip install -r requirements.txt
+````
+4. **Variáveis de Ambiente Crie um arquivo .env na raiz e adicione:**
+
 ```
-
-5. **Configure as variáveis de ambiente**
-
-Crie um arquivo `.env` na raiz do projeto:
-```env
 GROQ_API_KEY=sua_chave_aqui
-```
+````
+5. **Execute**
 
-6. **Execute a aplicação**
-```bash
+```
 python app.py
 ```
+Acesse em: http://127.0.0.1:5000
 
-7. **Acesse no navegador**
-```
-http://127.0.0.1:5000
-```
+🧠 Como Funciona a IA
+O Prompt do Sistema: A IA atua como um assistente sênior de triagem. Ela analisa o texto extraído e aplica regras de negócio:
 
-## 📁 Estrutura do Projeto
+Produtivo: Solicitações de reembolso, dúvidas sobre taxas, envio de comprovantes. -> Gera Resposta.
 
-```
-email-classifier/
-├── app.py                 # Backend Flask + integração com IA
-├── requirements.txt       # Dependências Python
-├── .env                   # Variáveis de ambiente (não commitado)
-├── .gitignore            # Arquivos ignorados pelo Git
-├── README.md             # Documentação
-└── templates/
-    └── index.html        # Interface web
-```
+Improdutivo: "Bom dia", "Obrigado", Spam. -> Não gera resposta.
 
-## 🎮 Como Usar
-
-1. **Insira o conteúdo do email** diretamente no campo de texto, OU
-2. **Faça upload de um arquivo** (.txt ou .pdf)
-3. **Clique em "Analisar Email"**
-4. **Visualize os resultados**:
-   - Classificação (Produtivo/Improdutivo)
-   - Sugestão de resposta (apenas para emails produtivos)
-
-## 🧠 Como Funciona a IA
-
-### Classificação
-
-**Produtivo:**
-- Solicitações de suporte ou problemas técnicos
-- Consultas sobre status de requisições
-- Compartilhamento ou solicitação de documentos
-- Perguntas específicas sobre serviços
-- Reclamações que requerem resolução
-
-**Improdutivo:**
-- Mensagens genéricas (Feliz Natal, Parabéns)
-- Agradecimentos simples sem perguntas
-- Spam ou propagandas
-- Conteúdo completamente irrelevante
-
-### Geração de Respostas
-
-Para emails **produtivos**, a IA:
-- Analisa o contexto e detalhes específicos (números de ticket, datas, etc.)
-- Gera resposta empática e profissional em português
-- Fornece próximos passos ou soluções
-
-Para emails **improdutivos**, não gera sugestão de resposta.
-
-
-## 👤 Autor
-
-Sara Silva
-Desenvolvido para o Desafio IA da AutoU
-
-## 📄 Licença
-
-Este projeto está sob a licença MIT.
+👤 Autor
+Sara Silva Desenvolvido para o Desafio Técnico AutoU
