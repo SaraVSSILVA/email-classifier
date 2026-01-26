@@ -6,7 +6,7 @@ Solução de IA para classificação automática de emails e geração de sugest
 
 ## 📺 Demo
 
-[Link para o Vídeo de Apresentação no YouTube](SEU_LINK_DO_VIDEO_AQUI)
+[Link para o Vídeo de Apresentação no YouTube](https://youtu.be/T8M31cjSVTo?si=UCFCFd0o8vC5jPuN)
 
 ---
 
