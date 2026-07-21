@@ -1,136 +1,275 @@
-import os
 import json
-from flask import Flask, render_template, request, jsonify
-from pypdf import PdfReader
-from groq import Groq
-from dotenv import load_dotenv
+import os
+import re
+import unicodedata
+from datetime import datetime
 
-env_path = os.path.join(os.path.dirname(__file__), '.env')
-load_dotenv(env_path)
+import gspread  # pyright: ignore[reportMissingImports]
+from dotenv import load_dotenv
+from flask import Flask, jsonify, render_template, request
+from groq import Groq
+import requests
+
+load_dotenv()
 
 app = Flask(__name__)
-api_key = os.getenv("GROQ_API_KEY")
 
-if not api_key:
+# Inicializa a conexão com o Google Sheets
+# O Flask vai procurar o arquivo credentials.json na mesma pasta
+gc = gspread.service_account(filename='credentials.json')
+planilha = None
+spreadsheet_id = os.environ.get("SPREADSHEET_ID")
+spreadsheet_url = os.environ.get("SPREADSHEET_URL")
+
+system_prompt = """Você é um assistente de caixa rápido para uma cantina. Sua função é extrair informações de vendas de mensagens de texto enviadas por atendentes.
+Sua saída DEVE ser estritamente um JSON válido, sem nenhum texto adicional, markdown ou explicações.
+Regras de extração:
+1. 'itens': Uma lista de objetos, cada um contendo 'produto' (string, nome padronizado do item) e 'quantidade' (inteiro).
+2. 'pagamento': Identifique a forma de pagamento (ex: 'pix', 'dinheiro', 'cartao'). Se não for mencionado, retorne null.
+3. 'observacao': Qualquer detalhe extra. Se não houver, retorne null."""
+
+
+def extrair_cabecalho_manual(mensagem):
+    nome = "-"
+    total = "-"
+    texto_limpo = mensagem
+
+    nome_match = re.search(r"\bnome\s*[:\-=]?\s*(.*?)\s*(?=\btotal\b|\||$)", mensagem, re.IGNORECASE)
+    if nome_match:
+        nome = nome_match.group(1).strip()
+        texto_limpo = re.sub(r"\bnome\s*[:\-=]?\s*.*?(?=\btotal\b|\||$)", "", texto_limpo, flags=re.IGNORECASE)
+
+    total_match = re.search(r"\btotal\s*[:\-=]?\s*([0-9]+(?:[.,][0-9]{1,2})?)", mensagem, re.IGNORECASE)
+    if total_match:
+        total = total_match.group(1).strip()
+        texto_limpo = re.sub(r"\btotal\s*[:\-=]?\s*[0-9]+(?:[.,][0-9]{1,2})?", "", texto_limpo, flags=re.IGNORECASE)
+    elif total == "-":
+        valor_match = re.search(r"\b[0-9]+(?:[.,][0-9]{2})\b", mensagem)
+        if valor_match:
+            total = valor_match.group(0).strip()
+            texto_limpo = texto_limpo.replace(valor_match.group(0), "")
+
+    if nome == "-":
+        inicio_match = re.match(r"^\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'-]*)\b", mensagem)
+        if inicio_match:
+            possivel_nome = inicio_match.group(1).strip()
+            if possivel_nome.lower() not in {"nome", "total", "saiu", "sai", "pagou", "pago"}:
+                nome = possivel_nome
+                texto_limpo = re.sub(rf"^\s*{re.escape(possivel_nome)}\b", "", texto_limpo, flags=re.IGNORECASE)
+
+    texto_limpo = re.sub(r"\s*\|\s*", " ", texto_limpo)
+    texto_limpo = re.sub(r"\s+", " ", texto_limpo).strip(" |")
+
+    return nome or "-", total or "-", texto_limpo
+
+
+def extrair_observacao_manual(mensagem_limpa):
+    texto = unicodedata.normalize("NFKD", mensagem_limpa.lower()).encode("ascii", "ignore").decode("ascii")
+
+    for termo in ["saiu", "sai", "vendeu", "vendido", "pagou", "pago", "nao", "não", "pix", "dinheiro", "cartao", "cartão", "no", "na", "em", "e", "total", "observacao", "observacao:"]:
+        texto = re.sub(rf"\b{re.escape(termo)}\b", " ", texto)
+
+    for termo in [
+        r"\b\d+\s+(?:agua|aguas|bolo|bolos|refri|refrigerante|refrigerantes|cachorro quente|cachorro-quente|coca|coca cola|salgado|salgados|cafe|cafes)\b",
+        r"\b[0-9]+(?:[.,][0-9]{2})\b",
+    ]:
+        texto = re.sub(termo, " ", texto)
+
+    for termo in ["agua", "aguas", "bolo", "bolos", "refri", "refrigerante", "refrigerantes", "cachorro quente", "cachorro-quente", "coca", "coca cola", "salgado", "salgados", "cafe", "cafes"]:
+        texto = re.sub(rf"\b{re.escape(termo)}\b", " ", texto)
+
+    texto = re.sub(r"\s+", " ", texto).strip(" ,;:-|")
+    return texto or None
+
+
+def extrair_pagamento_manual(mensagem_limpa):
+    texto = unicodedata.normalize("NFKD", mensagem_limpa.lower()).encode("ascii", "ignore").decode("ascii")
+
+    if re.search(r"\bnao\s+pagou\b", texto) or re.search(r"\bn[aã]o\s+pagou\b", mensagem_limpa, re.IGNORECASE):
+        return "fiado"
+    if "pix" in texto:
+        return "pix"
+    if "dinheiro" in texto or "cash" in texto:
+        return "dinheiro"
+    if "cartao" in texto or "cartão" in texto:
+        return "cartao"
+    if "fiado" in texto:
+        return "fiado"
+    return None
+
+
+def extrair_localmente(mensagem):
+    texto = unicodedata.normalize("NFKD", mensagem.lower()).encode("ascii", "ignore").decode("ascii")
+
+    itens = []
+    produto_mapa = {
+        "agua": "agua",
+        "aguas": "agua",
+        "bolo": "bolo",
+        "bolos": "bolo",
+        "refri": "refrigerante",
+        "refrigerante": "refrigerante",
+        "refrigerantes": "refrigerante",
+        "cachorro quente": "cachorro quente",
+        "cachorro-quente": "cachorro quente",
+        "coca": "refrigerante",
+        "coca cola": "refrigerante",
+        "salgado": "salgado",
+        "salgados": "salgado",
+        "cafe": "cafe",
+        "cafes": "cafe",
+    }
+
+    for termo, produto in produto_mapa.items():
+        for match in re.finditer(rf"(\d+)\s+{re.escape(termo)}\b", texto):
+            itens.append({"produto": produto, "quantidade": int(match.group(1))})
+
+    if not itens:
+        for termo, produto in produto_mapa.items():
+            if re.search(rf"\b{re.escape(termo)}\b", texto):
+                itens.append({"produto": produto, "quantidade": 1})
+
+    pagamento = None
+    if "pix" in texto:
+        pagamento = "pix"
+    elif "dinheiro" in texto:
+        pagamento = "dinheiro"
+    elif "cartao" in texto or "cartão" in texto:
+        pagamento = "cartao"
+
+    observacao = None
+    for termo in ["sem gelo", "fiado", "troco", "entregar", "entrega"]:
+        if termo in texto:
+            observacao = termo
+            break
+
+    return {
+        "itens": itens,
+        "pagamento": pagamento,
+        "observacao": observacao,
+    }
+
+
+def get_client():
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return None
+    return Groq(api_key=api_key)
+
+
+def classificar_venda(mensagem):
     try:
-        with open(env_path, 'r', encoding='utf-8-sig') as f:
-            content = f.read()
-            for line in content.split('\n'):
-                line = line.strip()
-                if line.startswith('GROQ_API_KEY'):
-                    api_key = line.split('=', 1)[1].strip()
-                    break
-    except Exception as e:
-        print(f"Erro ao ler .env: {e}")
+        client = get_client()
+        if client is None:
+            return extrair_localmente(mensagem)
 
-if not api_key:
-    raise ValueError("GROQ_API_KEY não foi configurada no .env")
-
-client = Groq(api_key=api_key)
-
-def extract_text_from_pdf(pdf_file):
-    reader = PdfReader(pdf_file)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text() + "\n"
-    return text
-
-def analyze_email_with_ai(email_content):
-    system_prompt = """You are an expert email analyst for a finance company. Analyze emails and return ONLY a JSON object with two fields:
-1. "category": "productive" or "unproductive"
-2. "suggestion_response": A response suggestion (empty string for unproductive emails)
-
-Classification Rules:
-- PRODUCTIVE: Emails requiring action or specific response:
-  * Support requests or technical issues
-  * Status inquiries about ongoing requests
-  * Document sharing or requests
-  * Specific questions about services
-  * Complaints or problems requiring resolution
-  * Information requests
-
-- UNPRODUCTIVE: Emails not requiring immediate action:
-  * Generic greetings (Merry Christmas, Happy Birthday)
-  * Simple thanks without questions
-  * Spam or advertisements
-  * Completely irrelevant content
-
-Response Rules:
-- For PRODUCTIVE emails: Write a professional, empathetic response IN PORTUGUESE addressing the customer's specific request. Reference details from their email (ticket numbers, dates, issues mentioned). Provide next steps or solutions.
-- For UNPRODUCTIVE emails: Return an empty string ""
-
-Examples:
-{
-  "category": "productive",
-  "suggestion_response": "Prezado(a), obrigado por entrar em contato. Verificamos que sua solicitação #9988 está em processamento. O reembolso será depositado em até 5 dias úteis. Caso tenha outras dúvidas, estamos à disposição."
-}
-
-{
-  "category": "unproductive",
-  "suggestion_response": ""
-}
-
-Return ONLY valid JSON, nothing else."""
-
-    try:
-        response = client.chat.completions.create(
+        chat_completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Analyze this email:\n\n{email_content}"}
+                {"role": "user", "content": mensagem},
             ],
-            temperature=0.3,
-            max_tokens=500
+            temperature=0.1,
+            response_format={"type": "json_object"},
         )
-        
-        response_text = response.choices[0].message.content.strip()
-        
-        if response_text.startswith('```json'):
-            response_text = response_text[7:]
-        if response_text.startswith('```'):
-            response_text = response_text[3:]
-        if response_text.endswith('```'):
-            response_text = response_text[:-3]
-        
-        result = json.loads(response_text.strip())
-        return result
-    except json.JSONDecodeError as e:
-        print(f"Erro ao fazer parse do JSON: {e}")
-        print(f"Resposta recebida: {response_text}")
-        return None
-    except Exception as e:
-        print(f"Erro na análise com Groq: {e}")
-        return None
+
+        return json.loads(chat_completion.choices[0].message.content)
+    except Exception:
+        return extrair_localmente(mensagem)
+
+
+def get_planilha():
+    global planilha
+    if planilha is None:
+        if spreadsheet_id:
+            planilha = gc.open_by_key(spreadsheet_id).sheet1
+        elif spreadsheet_url:
+            planilha = gc.open_by_url(spreadsheet_url).sheet1
+        else:
+            return None
+    return planilha
+
+
+def enviar_mensagem_telegram(chat_id, texto):
+    telegram_bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not telegram_bot_token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN não foi configurado no ambiente")
+
+    url = f"https://api.telegram.org/bot{telegram_bot_token}/sendMessage"
+    response = requests.post(
+        url,
+        json={"chat_id": chat_id, "text": texto},
+        timeout=15,
+    )
+    response.raise_for_status()
+    return response
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/classify', methods=['POST'])
-def classify_email():
-    email_text = ""
 
-    if 'file' in request.files and request.files['file'].filename != '':
-        file = request.files['file']
-        filename = file.filename.lower()
-        if filename.endswith('.pdf'):
-            email_text = extract_text_from_pdf(file)
-        elif filename.endswith('.txt'):
-            email_text = file.read().decode('utf-8')
-        else:
-            return jsonify({"error": "Only PDF and TXT files are supported."}), 400
-    else:
-        email_text = request.form.get('email_text', '')
-    
-    if not email_text.strip():
-        return jsonify({"error": "No email content provided."}), 400
-    
-    ai_result = analyze_email_with_ai(email_text)
+@app.route('/webhook', methods=['GET', 'POST'])
+def webhook():
+    if request.method == 'GET':
+        return jsonify({"status": "Cantina Bot Operacional"}), 200
 
-    if ai_result:
-        return jsonify(ai_result)
-    else:
-        return jsonify({"error": "Error processing email with AI."}), 500
+    if not request.is_json:
+        return jsonify({"status": "ok"}), 200
+
+    data = request.get_json(silent=True) or {}
+    mensagem = data.get('message', {}).get('text')
+    chat_id = data.get('message', {}).get('chat', {}).get('id')
+
+    if not mensagem or not chat_id:
+        return jsonify({"status": "ok"}), 200
+
+    nome, total, mensagem_limpa = extrair_cabecalho_manual(mensagem)
+
+    try:
+        resultado = classificar_venda(mensagem_limpa)
+        pagamento_manual = extrair_pagamento_manual(mensagem_limpa)
+        itens_formatados = ", ".join(
+            [f"{item['quantidade']}x {item['produto']}" for item in resultado.get('itens', [])]
+        )
+        pagamento = pagamento_manual or resultado.get('pagamento') or 'Não identificado'
+        pagamento = str(pagamento).upper()
+        observacao = resultado.get('observacao') or extrair_observacao_manual(mensagem_limpa) or "-"
+        resultado['observacao'] = observacao if observacao != "-" else None
+        if pagamento_manual:
+            resultado['pagamento'] = pagamento_manual
+        data_hora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        nome_formatado = nome or "-"
+        total_formatado = total or "-"
+
+        sheet = get_planilha()
+        salvo_na_planilha = False
+        if sheet is not None:
+            nova_linha = [nome_formatado, data_hora, itens_formatados, pagamento, observacao, total_formatado]
+            sheet.append_row(nova_linha)
+            salvo_na_planilha = True
+
+        try:
+            enviar_mensagem_telegram(chat_id, "✅ Venda registrada com sucesso na planilha!")
+        except Exception:
+            pass
+
+        return jsonify({
+            "status": "success",
+            "message": "Salvo na planilha com sucesso!" if salvo_na_planilha else "Planilha não configurada; venda processada sem persistência.",
+            "nome": nome_formatado,
+            "total": total_formatado,
+            "data": resultado,
+        }), 200
+    except Exception as error:
+        try:
+            enviar_mensagem_telegram(chat_id, f"❌ Não foi possível registrar a venda: {error}")
+        except Exception:
+            pass
+        return jsonify({"error": str(error)}), 200
+
+
 if __name__ == '__main__':
     app.run(debug=True)
 
