@@ -4,7 +4,7 @@ import re
 import unicodedata
 from datetime import datetime
 
-import gspread  # pyright: ignore[reportMissingImports]
+import gspread  
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
 from groq import Groq
@@ -191,7 +191,6 @@ def classificar_venda(mensagem):
         if client is None:
             return extrair_localmente(mensagem)
 
-        # Continua usando o Groq / Llama
         chat_completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
@@ -263,7 +262,6 @@ def webhook():
         resultado = classificar_venda(mensagem_limpa)
         pagamento_manual = extrair_pagamento_manual(mensagem_limpa)
         
-        # Garante que 'itens' existe e trata casos onde 'quantidade' ou 'produto' podem estar vazios
         itens_formatados = ", ".join(
             [f"{item.get('quantidade', 1)}x {item.get('produto', 'Item')}" for item in resultado.get('itens', [])]
         )
