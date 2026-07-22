@@ -19,11 +19,10 @@ planilha = None
 spreadsheet_id = os.environ.get("SPREADSHEET_ID")
 spreadsheet_url = os.environ.get("SPREADSHEET_URL")
 
-# Novo Prompt (mais rigoroso para forçar comidas/bebidas nos itens)
-system_prompt = """Você é um assistente de caixa rápido para uma cantina. Sua função é extrair informações de vendas de mensagens de texto enviadas por atendentes.
+system_prompt = system_prompt = """Você é um assistente de caixa rápido para uma cantina. Sua função é extrair informações de vendas de mensagens de texto enviadas por atendentes.
 Sua saída DEVE ser estritamente um JSON válido, sem nenhum texto adicional, markdown ou explicações.
 Regras de extração:
-1. 'itens': Uma lista de objetos, cada um contendo 'produto' (string, nome padronizado do item) e 'quantidade' (inteiro). ATENÇÃO: TUDO que for comida ou bebida (ex: suco, mousse, doce, torta, água, salgado, etc.) DEVE ser listado como item.
+1. 'itens': Uma lista de objetos, cada um contendo 'produto' (string, nome padronizado do item) e 'quantidade' (inteiro). ATENÇÃO: TUDO que for comida ou bebida (ex: suco, mousse, doce, torta, água, salgado, combo, etc.) DEVE ser listado como item.
 2. 'pagamento': Identifique a forma de pagamento (ex: 'pix', 'dinheiro', 'cartao'). Se não for mencionado, retorne null.
 3. 'observacao': Qualquer detalhe extra sobre o pedido (ex: 'para viagem', 'sem gelo'). NUNCA coloque nomes de comidas ou bebidas aqui. Se não houver observação real, retorne null."""
 
@@ -68,14 +67,13 @@ def extrair_observacao_manual(mensagem_limpa):
     for termo in ["saiu", "sai", "vendeu", "vendido", "pagou", "pago", "nao", "não", "pix", "dinheiro", "cartao", "cartão", "no", "na", "em", "e", "total", "observacao", "observacao:"]:
         texto = re.sub(rf"\b{re.escape(termo)}\b", " ", texto)
 
-    # Novo filtro de palavras a serem removidas da observação
     for termo in [
-        r"\b\d+\s+(?:agua|aguas|bolo|bolos|refri|refrigerante|refrigerantes|cachorro quente|cachorro-quente|coca|coca cola|salgado|salgados|cafe|cafes|suco|sucos|mousse|mousses|doce|doces|torta|tortas)\b",
+        r"\b\d+\s+(?:agua|aguas|bolo|bolos|refri|refrigerante|refrigerantes|cachorro quente|cachorro-quente|coca|coca cola|salgado|salgados|cafe|cafes|suco|sucos|mousse|mousses|doce|doces|torta|tortas|combo|combos)\b",
         r"\b[0-9]+(?:[.,][0-9]{2})\b",
     ]:
         texto = re.sub(termo, " ", texto)
 
-    for termo in ["agua", "aguas", "bolo", "bolos", "refri", "refrigerante", "refrigerantes", "cachorro quente", "cachorro-quente", "coca", "coca cola", "salgado", "salgados", "cafe", "cafes", "suco", "sucos", "mousse", "mousses", "doce", "doces", "torta", "tortas"]:
+    for termo in ["agua", "aguas", "bolo", "bolos", "refri", "refrigerante", "refrigerantes", "cachorro quente", "cachorro-quente", "coca", "coca cola", "salgado", "salgados", "cafe", "cafes", "suco", "sucos", "mousse", "mousses", "doce", "doces", "torta", "tortas", "combo", "combos"]:
         texto = re.sub(rf"\b{re.escape(termo)}\b", " ", texto)
 
     texto = re.sub(r"\s+", " ", texto).strip(" ,;:-|")
@@ -127,6 +125,8 @@ def extrair_localmente(mensagem):
         "doces": "doce",
         "torta": "torta",
         "tortas": "torta",
+        "combo": "combo",
+        "combos": "combos",
     }
 
     for termo, produto in produto_mapa.items():
