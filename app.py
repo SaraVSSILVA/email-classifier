@@ -283,7 +283,7 @@ def webhook():
         
         if sheet is not None:
             nova_linha = [nome_formatado, data_hora, itens_formatados, pagamento, observacao, total_formatado]
-            sheet.append_row(nova_linha)
+            sheet.append_row(nova_linha, value_input_option="USER_ENTERED")
             salvo_na_planilha = True
 
         try:
