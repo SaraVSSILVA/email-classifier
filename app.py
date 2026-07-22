@@ -14,9 +14,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Inicializa a conexão com o Google Sheets
-# O Flask vai procurar o arquivo credentials.json na mesma pasta
-gc = gspread.service_account(filename='credentials.json')
+gc = None
 planilha = None
 spreadsheet_id = os.environ.get("SPREADSHEET_ID")
 spreadsheet_url = os.environ.get("SPREADSHEET_URL")
@@ -157,6 +155,25 @@ def get_client():
     return Groq(api_key=api_key)
 
 
+def get_gspread_client():
+    global gc
+
+    if gc is not None:
+        return gc
+
+    credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") or "credentials.json"
+    if os.path.exists(credentials_path):
+        gc = gspread.service_account(filename=credentials_path)
+        return gc
+
+    credentials_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON") or os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if credentials_json:
+        gc = gspread.service_account_from_dict(json.loads(credentials_json))
+        return gc
+
+    return None
+
+
 def classificar_venda(mensagem):
     try:
         client = get_client()
@@ -181,10 +198,13 @@ def classificar_venda(mensagem):
 def get_planilha():
     global planilha
     if planilha is None:
+        client = get_gspread_client()
+        if client is None:
+            return None
         if spreadsheet_id:
-            planilha = gc.open_by_key(spreadsheet_id).sheet1
+            planilha = client.open_by_key(spreadsheet_id).sheet1
         elif spreadsheet_url:
-            planilha = gc.open_by_url(spreadsheet_url).sheet1
+            planilha = client.open_by_url(spreadsheet_url).sheet1
         else:
             return None
     return planilha
