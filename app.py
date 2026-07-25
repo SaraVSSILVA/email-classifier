@@ -68,12 +68,12 @@ def extrair_observacao_manual(mensagem_limpa):
         texto = re.sub(rf"\b{re.escape(termo)}\b", " ", texto)
 
     for termo in [
-        r"\b\d+\s+(?:agua|aguas|bolo|bolos|refri|refrigerante|refrigerantes|cachorro quente|cachorro-quente|coca|coca cola|salgado|salgados|cafe|cafes|suco|sucos|mousse|mousses|doce|doces|torta|tortas|combo|combos)\b",
+        r"\b\d+\s+(?:agua|aguas|bolo|bolos|refri|refrigerante|refrigerantes|cachorro quente|cachorro-quente|coca|coca cola|salgado|salgados|cafe|cafes|suco|sucos|mousse|mousses|doce|doces|torta|tortas|combo|combos|lanche|lanches)\b",
         r"\b[0-9]+(?:[.,][0-9]{2})\b",
     ]:
         texto = re.sub(termo, " ", texto)
 
-    for termo in ["agua", "aguas", "bolo", "bolos", "refri", "refrigerante", "refrigerantes", "cachorro quente", "cachorro-quente", "coca", "coca cola", "salgado", "salgados", "cafe", "cafes", "suco", "sucos", "mousse", "mousses", "doce", "doces", "torta", "tortas", "combo", "combos"]:
+    for termo in ["agua", "aguas", "bolo", "bolos", "refri", "refrigerante", "refrigerantes", "cachorro quente", "cachorro-quente", "coca", "coca cola", "salgado", "salgados", "cafe", "cafes", "suco", "sucos", "mousse", "mousses", "doce", "doces", "torta", "tortas", "combo", "combos", "lanche", "lanches"]:
         texto = re.sub(rf"\b{re.escape(termo)}\b", " ", texto)
 
     texto = re.sub(r"\s+", " ", texto).strip(" ,;:-|")
@@ -102,6 +102,8 @@ def extrair_localmente(mensagem):
     itens = []
     # Dicionário atualizado com novos produtos
     produto_mapa = {
+        "lanche": "lanche",
+        "lanches": "lanche",
         "agua": "agua",
         "aguas": "agua",
         "bolo": "bolo",
@@ -127,6 +129,8 @@ def extrair_localmente(mensagem):
         "tortas": "torta",
         "combo": "combo",
         "combos": "combos",
+        "lanche": "lanche",
+        "lanches": "lanche",
     }
 
     for termo, produto in produto_mapa.items():
